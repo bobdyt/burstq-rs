@@ -1,0 +1,15 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: cron
+      cronjob: "0 3 * * 2,4,6"
+      timezone: Europe/Copenhagen
+
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: cron
+      cronjob: "0 3 * * 2,4,6"
+      timezone: Europe/Copenhagen
