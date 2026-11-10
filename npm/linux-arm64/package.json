@@ -1,0 +1,12 @@
+{
+  "name": "burstq-linux-arm64",
+  "description": "burstq native binary for linux-arm64",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bobdyt/burstq-rs.git"
+  },
+  "os": ["linux"],
+  "cpu": ["arm64"],
+  "files": ["bin/burstq"]
+}

@@ -1,0 +1,12 @@
+{
+  "name": "burstq-darwin-x64",
+  "description": "burstq native binary for darwin-x64",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bobdyt/burstq-rs.git"
+  },
+  "os": ["darwin"],
+  "cpu": ["x64"],
+  "files": ["bin/burstq"]
+}

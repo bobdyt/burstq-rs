@@ -1,0 +1,32 @@
+{
+  "name": "burstq",
+  "description": "CLI Concurrent TODO list",
+  "bin": {
+    "burstq": "bin/burstq.cjs"
+  },
+  "files": [
+    "bin/burstq.cjs",
+    "README.md"
+  ],
+  "optionalDependencies": {},
+  "os": [
+    "linux",
+    "darwin"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bobdyt/burstq-rs.git"
+  },
+  "homepage": "https://github.com/bobdyt/burstq-rs",
+  "bugs": {
+    "url": "https://github.com/bobdyt/burstq-rs/issues"
+  }
+}
