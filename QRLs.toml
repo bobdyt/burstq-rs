@@ -41,4 +41,7 @@ git add Cargo.toml Cargo.lock CHANGELOG.md
 git commit -m "release: v$VERSION"
 """
 
-
+[bq.clippy]
+run = """
+cargo clippy --locked --all-targets --all-features -- -D warnings
+"""
