@@ -1,0 +1,247 @@
+name: Tag merged version
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  tag:
+    permissions:
+      contents: write
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      changed: ${{ steps.version.outputs.before != steps.version.outputs.after }}
+      tag: v${{ steps.version.outputs.after }}
+
+    steps:
+      - name: Check out release commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Read package versions
+        id: version
+        env:
+          BASE_SHA: ${{ github.event.before }}
+          MERGE_SHA: ${{ github.sha }}
+        run: |
+          git switch --detach "$BASE_SHA"
+          BEFORE=$(cargo metadata --no-deps --format-version 1 | jq -er '.packages[0].version')
+          git switch --detach "$MERGE_SHA"
+          AFTER=$(cargo metadata --no-deps --format-version 1 | jq -er '.packages[0].version')
+          echo "before=$BEFORE" >> "$GITHUB_OUTPUT"
+          echo "after=$AFTER" >> "$GITHUB_OUTPUT"
+
+      - name: Push version tag
+        if: steps.version.outputs.before != steps.version.outputs.after
+        env:
+          TAG: v${{ steps.version.outputs.after }}
+          MERGE_SHA: ${{ github.sha }}
+        run: |
+          if EXISTING=$(git rev-parse --verify "refs/tags/$TAG^{commit}" 2>/dev/null); then
+            if [ "$EXISTING" != "$MERGE_SHA" ]; then
+              echo "Tag $TAG already points to another commit."
+              exit 1
+            fi
+          else
+            git tag "$TAG" "$MERGE_SHA"
+          fi
+          git push origin "refs/tags/$TAG"
+
+  build:
+    needs: tag
+    if: needs.tag.outputs.changed == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-22.04
+            target: x86_64-unknown-linux-musl
+            platform: linux-x64
+            archive: linux-x86_64
+          - runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
+            platform: linux-arm64
+            archive: linux-aarch64
+          - runner: macos-15-intel
+            target: x86_64-apple-darwin
+            platform: darwin-x64
+            archive: macos-x86_64
+          - runner: macos-15
+            target: aarch64-apple-darwin
+            platform: darwin-arm64
+            archive: macos-aarch64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.tag.outputs.tag }}
+          persist-credentials: false
+
+      - name: Check tag matches package version
+        env:
+          TAG: ${{ needs.tag.outputs.tag }}
+        run: |
+          VERSION=$(cargo metadata --no-deps --format-version 1 | jq -er '.packages[0].version')
+          test "$TAG" = "v$VERSION"
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Install target
+        env:
+          TARGET: ${{ matrix.target }}
+        run: rustup target add "$TARGET"
+
+      - name: Install musl tools
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes musl-tools
+
+      - name: Build native binary
+        env:
+          TARGET: ${{ matrix.target }}
+        run: cargo build --release --locked --target "$TARGET"
+
+      - name: Package npm binaries and launcher
+        env:
+          TAG: ${{ needs.tag.outputs.tag }}
+          TARGET: ${{ matrix.target }}
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          VERSION="${TAG#v}"
+          mkdir -p staging dist
+          cp -R npm staging/burstq
+          mkdir -p "staging/burstq/$PLATFORM/bin"
+          cp "target/$TARGET/release/burstq" "staging/burstq/$PLATFORM/bin/burstq"
+          cp LICENSE staging/burstq/LICENSE
+          cp README.md staging/burstq/README.md
+          cp LICENSE "staging/burstq/$PLATFORM/LICENSE"
+          chmod +x staging/burstq/bin/burstq.cjs "staging/burstq/$PLATFORM/bin/burstq"
+          # Inject the Cargo-derived version and exact dependency pins into versionless manifests.
+          npm --prefix staging/burstq pkg set "version=$VERSION" \
+            "optionalDependencies.burstq-linux-x64=$VERSION" \
+            "optionalDependencies.burstq-linux-arm64=$VERSION" \
+            "optionalDependencies.burstq-darwin-x64=$VERSION" \
+            "optionalDependencies.burstq-darwin-arm64=$VERSION"
+          npm --prefix "staging/burstq/$PLATFORM" pkg set "version=$VERSION"
+          npm pack "./staging/burstq/$PLATFORM" --pack-destination dist
+          npm pack ./staging/burstq --pack-destination staging
+          if [ "$PLATFORM" = linux-x64 ]; then
+            cp "staging/burstq-$VERSION.tgz" dist/
+          fi
+
+      - name: Test packaged npm command
+        env:
+          TAG: ${{ needs.tag.outputs.tag }}
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          VERSION="${TAG#v}"
+          TEST_DIRECTORY=$(mktemp -d)
+          cd "$TEST_DIRECTORY"
+          npm init --yes
+          # Resolve the host binary from its local tarball instead of the registry.
+          npm pkg set "overrides.burstq-$PLATFORM=file:$GITHUB_WORKSPACE/dist/burstq-$PLATFORM-$VERSION.tgz"
+          npm install --offline --ignore-scripts --no-audit --no-fund --include=optional \
+            "$GITHUB_WORKSPACE/staging/burstq-$VERSION.tgz"
+          jq -e --arg version "$VERSION" '.version == $version and (.optionalDependencies | length == 4 and all(.[]; . == $version))' \
+            node_modules/burstq/package.json
+          test -f node_modules/burstq/README.md
+          jq -e --arg version "$VERSION" '.version == $version' "node_modules/burstq-$PLATFORM/package.json"
+          test "$(./node_modules/.bin/burstq --version)" = "burstq $VERSION"
+          ./node_modules/.bin/burstq --help
+          python3 "$GITHUB_WORKSPACE/scripts/test-terminal.py" "$TEST_DIRECTORY/node_modules/.bin/burstq"
+
+      - name: Package binary
+        env:
+          VERSION: ${{ needs.tag.outputs.tag }}
+          TARGET: ${{ matrix.target }}
+          PLATFORM: ${{ matrix.archive }}
+        run: |
+          VERSION="${VERSION#v}"
+          DIRECTORY="burstq-${VERSION}-${PLATFORM}"
+          ARCHIVE="${DIRECTORY}.tar.gz"
+
+          mkdir "$DIRECTORY"
+          cp "target/$TARGET/release/burstq" "$DIRECTORY/"
+          cp LICENSE README.md "$DIRECTORY/"
+          tar -czf "dist/$ARCHIVE" "$DIRECTORY"
+          cd dist
+          shasum -a 256 "$ARCHIVE" > "$ARCHIVE.sha256"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-${{ matrix.platform }}
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    needs: [tag, build]
+    concurrency:
+      group: publish-${{ needs.tag.outputs.tag }}
+      cancel-in-progress: false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.tag.outputs.tag }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Install npm with trusted publishing support
+        run: |
+          npm install --global npm@11
+          npm --version
+
+      - name: Publish to crates.io
+        run: cargo publish --locked
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      # Download only after Cargo publishes: untracked dist files dirty the checkout.
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: dist
+
+      # Configure this workflow as a trusted publisher on each of the five npm packages.
+      - name: Publish platform packages, then launcher using OIDC
+        env:
+          TAG: ${{ needs.tag.outputs.tag }}
+        run: |
+          VERSION="${TAG#v}"
+          for PLATFORM in linux-x64 linux-arm64 darwin-x64 darwin-arm64; do
+            npm publish "./dist/burstq-$PLATFORM-$VERSION.tgz" --access public --provenance --loglevel=verbose
+          done
+          npm publish "./dist/burstq-$VERSION.tgz" --access public --provenance --loglevel=verbose
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.tag.outputs.tag }}
+        run: |
+          gh release create "$TAG" \
+            dist/burstq-*.tar.gz \
+            dist/burstq-*.tar.gz.sha256 \
+            --verify-tag \
+            --title "$TAG" \
+            --generate-notes
