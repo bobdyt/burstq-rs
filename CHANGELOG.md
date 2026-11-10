@@ -1,3 +1,6 @@
+### 0.1.4
+- Add NPM packaging
+
 ### 0.1.3
 - Clean up unused tests
 
