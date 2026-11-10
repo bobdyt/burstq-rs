@@ -43,17 +43,17 @@ jobs:
         run: cargo install cargo-edit --locked
 
       - name: Install qrlkit
-        run: cargo install --path . --locked
+        run: cargo install qrlkit
 
       - name: Import repository QRLs
         env:
           QRL_STATE: ${{ runner.temp }}/qrlkit-state.yaml
-        run: qrlkit --config "$QRL_STATE" add QRLs.toml
+        run: qrlkit add QRLs.toml
 
       - name: Prepare release
         env:
           QRL_STATE: ${{ runner.temp }}/qrlkit-state.yaml
-        run: qrlkit --config "$QRL_STATE" qk prep-release patch "Bump dependencies"
+        run: qk prep-release patch "Bump dependencies"
 
       # The tag workflow creates the version tag after this PR is merged.
       - name: Push release branch
