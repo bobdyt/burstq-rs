@@ -1,3 +1,6 @@
+### 0.1.9
+- Fix bad crate name change in 0.1.7
+
 ### 0.1.8
 - Added repo and license to Cargo.toml
 
