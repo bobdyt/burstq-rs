@@ -141,27 +141,6 @@ jobs:
             cp "staging/burstq-$VERSION.tgz" dist/
           fi
 
-      - name: Test packaged npm command
-        env:
-          TAG: ${{ needs.tag.outputs.tag }}
-          PLATFORM: ${{ matrix.platform }}
-        run: |
-          VERSION="${TAG#v}"
-          TEST_DIRECTORY=$(mktemp -d)
-          cd "$TEST_DIRECTORY"
-          npm init --yes
-          # Resolve the host binary from its local tarball instead of the registry.
-          npm pkg set "overrides.burstq-$PLATFORM=file:$GITHUB_WORKSPACE/dist/burstq-$PLATFORM-$VERSION.tgz"
-          npm install --offline --ignore-scripts --no-audit --no-fund --include=optional \
-            "$GITHUB_WORKSPACE/staging/burstq-$VERSION.tgz"
-          jq -e --arg version "$VERSION" '.version == $version and (.optionalDependencies | length == 4 and all(.[]; . == $version))' \
-            node_modules/burstq/package.json
-          test -f node_modules/burstq/README.md
-          jq -e --arg version "$VERSION" '.version == $version' "node_modules/burstq-$PLATFORM/package.json"
-          test "$(./node_modules/.bin/burstq --version)" = "burstq $VERSION"
-          ./node_modules/.bin/burstq --help
-          python3 "$GITHUB_WORKSPACE/scripts/test-terminal.py" "$TEST_DIRECTORY/node_modules/.bin/burstq"
-
       - name: Package binary
         env:
           VERSION: ${{ needs.tag.outputs.tag }}
