@@ -1,7 +1,10 @@
 [package]
 name = "burstq"
-version = "0.1.6"
+version = "0.1.8"
 edition = "2024"
+description = "A terminal-based concurrent TODO list"
+license = "MIT"
+repository = "https://github.com/bobdyt/burstq-rs"
 
 [[bin]]
 name = "burstq"

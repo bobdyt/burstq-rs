@@ -1,3 +1,9 @@
+### 0.1.8
+- Added repo and license to Cargo.toml
+
+### 0.1.7
+- Fix tests and prep release
+
 ### 0.1.6
 - Fix dependabot
 
