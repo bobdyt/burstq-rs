@@ -32,7 +32,7 @@ pub fn render_overview(
         .iter()
         .filter(|wi| {
             let mut selected_tag = "".to_string();
-            if state.show_tag_nav {
+            if state.show_tag_nav && tags.len() > 0 {
                 selected_tag = tags[state.tag_nav_idx].to_string();
             }
             return wi.tags.contains(&selected_tag);
@@ -64,11 +64,9 @@ pub fn render_overview(
     } else {
         0
     }));
-    verticals.push(Constraint::Percentage(if state.show_details {
-        30
-    } else {
-        0
-    }));
+    verticals.push(Constraint::Percentage(
+        if state.show_details && wq_rows.len() > 0 { 30 } else { 0 },
+    ));
     verticals.push(Constraint::Length(if state.show_tag_nav { 3 } else { 0 }));
     verticals.push(Constraint::Fill(1));
     let vlayout = Layout::vertical(verticals).split(main);
@@ -76,25 +74,30 @@ pub fn render_overview(
     if state.show_details {
         let wq = state.wq.borrow();
         if let Some(idx) = state.wq_table_idx {
-            let wi = wq[idx].clone();
-            let mut details = TextArea::from(
-                vec![
-                    wi.task.lines().map(String::from).collect::<Vec<_>>(),
-                    vec!["\n".to_string()],
-                    wi.details.lines().map(String::from).collect::<Vec<_>>(),
-                ]
-                .into_iter()
-                .flatten()
-                .collect::<Vec<_>>(),
-            );
-            details.set_block(
-                Block::bordered()
-                    .title(" Preview ")
-                    .padding(Padding::uniform(1)),
-            );
-            details.set_cursor_line_style(Style::default());
-            details.set_cursor_style(Style::default());
-            frame.render_widget(&details, vlayout[1]);
+            if wq.len() > 0 {
+                let wi = wq[idx].clone();
+                let mut details = TextArea::from(
+                    vec![
+                        wi.task.lines().map(String::from).collect::<Vec<_>>(),
+                        vec!["\n".to_string()],
+                        wi.details
+                            .lines()
+                            .map(String::from)
+                            .collect::<Vec<_>>(),
+                    ]
+                    .into_iter()
+                    .flatten()
+                    .collect::<Vec<_>>(),
+                );
+                details.set_block(
+                    Block::bordered()
+                        .title(" Preview ")
+                        .padding(Padding::uniform(1)),
+                );
+                details.set_cursor_line_style(Style::default());
+                details.set_cursor_style(Style::default());
+                frame.render_widget(&details, vlayout[1]);
+            }
         }
     }
 
@@ -106,7 +109,7 @@ pub fn render_overview(
             }
             let span = Span::raw(format!("{}", tag));
             if i == state.tag_nav_idx {
-                spans.push(span.bold());
+                spans.push(span.bold().green());
             } else {
                 spans.push(span)
             }
@@ -137,7 +140,6 @@ pub fn render_overview(
             .row_highlight_style(Style::new().on_black().bold())
             .column_highlight_style(Color::Gray)
             .cell_highlight_style(Style::new().reversed().yellow())
-            .highlight_symbol(">")
             .block(
                 Block::new()
                     .borders(Borders::ALL)
@@ -168,7 +170,6 @@ pub fn render_overview(
         .row_highlight_style(Style::new().on_black().bold())
         .column_highlight_style(Color::Gray)
         .cell_highlight_style(Style::new().reversed().yellow())
-        .highlight_symbol(">")
         .block(
             Block::new()
                 .borders(Borders::ALL)
