@@ -1,3 +1,6 @@
+### 0.2.1
+- Fix coloring in edit page
+
 ## 0.2.0
 - Multiple big bug fixes
 
