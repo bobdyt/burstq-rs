@@ -1,3 +1,6 @@
+## 0.2.0
+- Multiple big bug fixes
+
 ### 0.1.9
 - Fix bad crate name change in 0.1.7
 
