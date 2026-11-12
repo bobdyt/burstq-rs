@@ -101,7 +101,7 @@ impl Model {
         let mut m = Model {
             pr: "Super Project".to_string(),
             bq: Vec::new(),
-            wq: WorkItem::loremipsum(),
+            wq: Rc::new(RefCell::new(Vec::new())),
             ui: UIState { terminate: false, history: Vec::new() },
         };
         m.ui.history.push(Pages::Overview(OverviewPageState {
@@ -165,7 +165,7 @@ impl Model {
                 let item = self.get_work_item_by_wid(wi.wid.clone());
                 self.ui.goto_page(Pages::Edit(EditPageState {
                     field: EditPageFields::Task,
-                    mode: UserMode::Navigating,
+                    mode: UserMode::Typing,
                     wid: wi.wid.clone(),
                     state: wi.state.clone(),
                     task: TextArea::new(
@@ -352,6 +352,9 @@ impl OverviewPageState {
 
     fn toggle_tag_nav(&mut self) -> Option<Vec<StateChanges>> {
         self.show_tag_nav = !self.show_tag_nav;
+        if self.show_tag_nav {
+            self.tag_nav_idx = 0;
+        }
         None
     }
 
@@ -385,13 +388,20 @@ impl OverviewPageState {
         None
     }
 
+    fn reset_wq_selection(&mut self) -> Option<Vec<StateChanges>> {
+        if let Some(n) = self.wq_table_idx {
+            self.wq_table_idx = Some(0)
+        };
+        None
+    }
+
     fn decr_tag_nav_idx(&mut self) -> Option<Vec<StateChanges>> {
         if self.tag_nav_idx != 0 {
             self.tag_nav_idx -= 1;
         } else {
             self.tag_nav_idx = self.get_tags().len() - 1;
         }
-        None
+        self.reset_wq_selection()
     }
 
     fn incr_tag_nav_idx(&mut self) -> Option<Vec<StateChanges>> {
@@ -400,7 +410,7 @@ impl OverviewPageState {
         } else {
             self.tag_nav_idx += 1;
         }
-        None
+        self.reset_wq_selection()
     }
 
     pub fn get_tags(&self) -> Vec<String> {
@@ -408,6 +418,9 @@ impl OverviewPageState {
             .wq
             .borrow()
             .clone()
+            .into_iter()
+            .filter(|wi| wi.tags != "".to_string())
+            .collect::<Vec<_>>()
             .into_iter()
             .flat_map(|wi| {
                 wi.tags
@@ -446,7 +459,10 @@ impl OverviewPageState {
 
     fn yield_new_item(&self) -> Option<Vec<StateChanges>> {
         let tags = self.get_tags();
-        let tag = &tags[self.tag_nav_idx];
+        let mut tag = "".to_string();
+        if tags.len() > 0 && self.show_tag_nav {
+            tag = tags[self.tag_nav_idx].clone();
+        }
         Some(vec![StateChanges::NewWorkItem(tag.to_string())])
     }
 

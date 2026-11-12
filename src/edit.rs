@@ -9,6 +9,7 @@ use ratatui::style::Color;
 use ratatui::style::Style;
 use ratatui::widgets::Block;
 use ratatui::widgets::Padding;
+use ratatui_textarea::TextArea;
 
 pub fn render_edit_page(
     frame: &mut Frame,
@@ -33,6 +34,12 @@ pub fn render_edit_page(
                 &state.mode,
             )),
     );
+    set_read_only_style(
+        &mut state.tags,
+        EditPageFields::Tags,
+        &state.field,
+        &state.mode,
+    );
     frame.render_widget(&state.tags, tags_area);
 
     let task_area = layout[1];
@@ -45,6 +52,12 @@ pub fn render_edit_page(
                 &state.field,
                 &state.mode,
             )),
+    );
+    set_read_only_style(
+        &mut state.task,
+        EditPageFields::Task,
+        &state.field,
+        &state.mode,
     );
     frame.render_widget(&state.task, task_area);
 
@@ -59,7 +72,25 @@ pub fn render_edit_page(
                 &state.mode,
             )),
     );
+    set_read_only_style(
+        &mut state.details,
+        EditPageFields::Details,
+        &state.field,
+        &state.mode,
+    );
     frame.render_widget(&state.details, details_area);
+}
+
+fn set_read_only_style(
+    widget: &mut TextArea<'static>,
+    target: EditPageFields,
+    selected: &EditPageFields,
+    mode: &UserMode,
+) {
+    if target != *selected || *mode == UserMode::Navigating {
+        widget.set_cursor_line_style(Style::default());
+        widget.set_cursor_style(Style::default());
+    }
 }
 
 fn get_border_style_on_selected(
@@ -69,7 +100,7 @@ fn get_border_style_on_selected(
 ) -> Style {
     if target == *selected {
         match mode {
-            UserMode::Navigating => Style::default().fg(Color::Yellow),
+            UserMode::Navigating => Style::default().fg(Color::Green),
             UserMode::Typing => Style::default().fg(Color::Red),
         }
     } else {

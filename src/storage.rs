@@ -11,7 +11,7 @@ use crate::model::WorkItem;
 const WORK_QUEUE: &str = "wq.json";
 
 fn get_path(filename: &str) -> color_eyre::Result<PathBuf> {
-    let dirs = ProjectDirs::from("tool", "roro", "cli")
+    let dirs = ProjectDirs::from("tool", "burstq", "cli")
         .wrap_err("Could not determine config directory")?;
 
     let dir = dirs.data_dir();

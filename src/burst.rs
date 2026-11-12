@@ -47,7 +47,6 @@ pub fn render_burst_page(
         .row_highlight_style(Style::new().on_black().bold())
         .column_highlight_style(Color::Gray)
         .cell_highlight_style(Style::new().reversed().yellow())
-        .highlight_symbol(">")
         .block(Block::new().borders(Borders::ALL));
 
     frame.render_stateful_widget(table, table_area, &mut table_state);
