@@ -7,6 +7,7 @@ use ratatui::layout::Layout;
 use ratatui::layout::Rect;
 use ratatui::style::Color;
 use ratatui::style::Style;
+use ratatui::style::Modifier;
 use ratatui::widgets::Block;
 use ratatui::widgets::Padding;
 use ratatui_textarea::TextArea;
@@ -36,7 +37,7 @@ pub fn render_edit_page(
     );
     set_read_only_style(
         &mut state.tags,
-        EditPageFields::Tags,
+        &EditPageFields::Tags,
         &state.field,
         &state.mode,
     );
@@ -55,7 +56,7 @@ pub fn render_edit_page(
     );
     set_read_only_style(
         &mut state.task,
-        EditPageFields::Task,
+        &EditPageFields::Task,
         &state.field,
         &state.mode,
     );
@@ -74,7 +75,7 @@ pub fn render_edit_page(
     );
     set_read_only_style(
         &mut state.details,
-        EditPageFields::Details,
+        &EditPageFields::Details,
         &state.field,
         &state.mode,
     );
@@ -83,12 +84,14 @@ pub fn render_edit_page(
 
 fn set_read_only_style(
     widget: &mut TextArea<'static>,
-    target: EditPageFields,
+    target: &EditPageFields,
     selected: &EditPageFields,
     mode: &UserMode,
 ) {
-    if target != *selected || *mode == UserMode::Navigating {
-        widget.set_cursor_line_style(Style::default());
+    widget.set_cursor_line_style(Style::default());
+    if target == selected && *mode == UserMode::Typing {
+        widget.set_cursor_style(Style::default().add_modifier(Modifier::UNDERLINED));
+    } else {
         widget.set_cursor_style(Style::default());
     }
 }
