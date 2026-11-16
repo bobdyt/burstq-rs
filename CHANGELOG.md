@@ -1,3 +1,6 @@
+## 0.3.0
+- Refactor task + details -> brief + burst queue state shows brief
+
 ### 0.2.1
 - Fix coloring in edit page
 

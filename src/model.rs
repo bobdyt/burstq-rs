@@ -17,6 +17,7 @@ pub enum BurstQueueState {
     BurstEnded,
     BurstPending,
     Completed,
+    Error,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
@@ -26,6 +27,7 @@ pub enum WorkItemState {
     Burst,
     Completed,
     Forgotten,
+    Error,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
@@ -36,31 +38,39 @@ pub struct WorkItem {
     // Work Item State
     pub state: WorkItemState,
 
-    // One line description
-    pub task: String,
-
     // Details
-    pub details: String,
+    pub brief: String,
 
     // Tags
     pub tags: String,
 }
 
 impl WorkItem {
+    fn not_found() -> WorkItem {
+        return WorkItem {
+            wid: "NOT FOUND".to_string(),
+            state: WorkItemState::Error,
+            brief: "NOT FOUND".to_string(),
+            tags: "errors".to_string(),
+        };
+    }
+
+    fn brief_lines(&self) -> Vec<String> {
+        return self.brief.split("\n").map(String::from).collect();
+    }
+
     fn loremipsum() -> WorkQueue {
         Rc::new(RefCell::new(vec![
             WorkItem {
                 wid: "A0-3E-CC".to_string(),
                 state: WorkItemState::Pending,
-                task: "do it".to_string(),
-                details: "".to_string(),
+                brief: "".to_string(),
                 tags: "demo,burst".to_string(),
             },
             WorkItem {
                 wid: "3B-DD-1E".to_string(),
                 state: WorkItemState::Pending,
-                task: "plan that thing".to_string(),
-                details: "".to_string(),
+                brief: "".to_string(),
                 tags: "demo".to_string(),
             },
         ]))
@@ -77,6 +87,16 @@ pub struct BurstItem {
 
     // Queue state
     pub state: BurstQueueState,
+}
+
+impl BurstItem {
+    fn not_found() -> BurstItem {
+        return BurstItem {
+            wid: "NOT FOUND".to_string(),
+            order: 0,
+            state: BurstQueueState::Error,
+        };
+    }
 }
 
 pub type WorkQueue = Rc<RefCell<Vec<WorkItem>>>;
@@ -107,9 +127,9 @@ impl Model {
         m.ui.history.push(Pages::Overview(OverviewPageState {
             wq: m.wq.clone(),
             wq_table_idx: Some(0),
-            show_details: false,
+            show_brief: false,
             preview_bq: true,
-            preview_details: TextArea::new(vec!["".to_string()]),
+            preview_brief: TextArea::new(vec!["".to_string()]),
             show_tag_nav: false,
             tag_nav_idx: 0,
         }));
@@ -153,8 +173,7 @@ impl Model {
                 let new_item = WorkItem {
                     wid: id.clone(),
                     state: WorkItemState::Pending,
-                    task: "".to_string(),
-                    details: "".to_string(),
+                    brief: "".to_string(),
                     tags: tags,
                 };
                 let mut wq = self.wq.borrow_mut();
@@ -164,15 +183,12 @@ impl Model {
             StateChanges::EditWorkItem(wi) => {
                 let item = self.get_work_item_by_wid(wi.wid.clone());
                 self.ui.goto_page(Pages::Edit(EditPageState {
-                    field: EditPageFields::Task,
+                    field: EditPageFields::Brief,
                     mode: UserMode::Typing,
                     wid: wi.wid.clone(),
                     state: wi.state.clone(),
-                    task: TextArea::new(
-                        item.task.split("\n").map(String::from).collect(),
-                    ),
-                    details: TextArea::new(
-                        item.details.split("\n").map(String::from).collect(),
+                    brief: TextArea::new(
+                        item.brief.split("\n").map(String::from).collect(),
                     ),
                     tags: TextArea::new(
                         item.tags.split("\n").map(String::from).collect(),
@@ -183,8 +199,7 @@ impl Model {
                 let mut wq = self.wq.borrow_mut();
                 wq.iter_mut().for_each(|wi| {
                     if wi.wid == new_wi.wid {
-                        wi.task = new_wi.task.clone();
-                        wi.details = new_wi.details.clone();
+                        wi.brief = new_wi.brief.clone();
                         wi.state = new_wi.state.clone();
                         wi.tags = new_wi.tags.clone();
                     }
@@ -209,10 +224,24 @@ impl Model {
                         order: 1,
                     })
                     .collect::<Vec<_>>();
+
+                let mut wi = WorkItem::not_found();
+                if bq.len() > 0 {
+                    let wid = bq[0].wid.to_string();
+                    let matches: Vec<_> = wq
+                        .clone()
+                        .into_iter()
+                        .filter(|wi| wi.wid == wid)
+                        .collect();
+                    if matches.len() > 0 {
+                        wi = matches[0].clone();
+                    }
+                }
                 self.ui.goto_page(Pages::Burst(BurstPageState {
                     table_idx: Some(0),
                     bq: bq,
                     wq: self.wq.clone(),
+                    brief: TextArea::new(wi.brief_lines()),
                 }));
             }
         });
@@ -230,13 +259,7 @@ impl Model {
 
         let item: WorkItem = match matches_on_id.first() {
             Some(wi) => (*wi).clone(),
-            None => WorkItem {
-                wid: "not-found-id".to_string(),
-                state: WorkItemState::Pending,
-                task: "FAILED TO FIND WORK ITEM".to_string(),
-                details: "FAILED TO FIND WORK ITEM".to_string(),
-                tags: "".to_string(),
-            },
+            None => WorkItem::not_found(),
         };
         return item;
     }
@@ -320,9 +343,9 @@ impl UIState {
 pub struct OverviewPageState {
     pub wq_table_idx: Option<usize>,
     pub wq: WorkQueue,
-    pub show_details: bool,
+    pub show_brief: bool,
     pub preview_bq: bool,
-    pub preview_details: TextArea<'static>,
+    pub preview_brief: TextArea<'static>,
     pub show_tag_nav: bool,
     pub tag_nav_idx: usize,
 }
@@ -340,7 +363,7 @@ impl OverviewPageState {
             KeyCode::Char('n') => self.yield_new_item(),
             KeyCode::Char('d') => self.yield_delete_item(),
             KeyCode::Enter => Some(vec![StateChanges::EnterBurstMode]),
-            KeyCode::Char('p') => self.toggle_show_details(),
+            KeyCode::Char('p') => self.toggle_show_brief(),
             KeyCode::Char('b') => self.toggle_preview_bq(),
             KeyCode::Char('t') => self.toggle_tag_nav(),
             KeyCode::Char('h') => self.decr_tag_nav_idx(),
@@ -358,8 +381,8 @@ impl OverviewPageState {
         None
     }
 
-    fn toggle_show_details(&mut self) -> Option<Vec<StateChanges>> {
-        self.show_details = !self.show_details;
+    fn toggle_show_brief(&mut self) -> Option<Vec<StateChanges>> {
+        self.show_brief = !self.show_brief;
         None
     }
 
@@ -497,8 +520,8 @@ pub enum UserMode {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum EditPageFields {
-    Task,
-    Details,
+    //Task,
+    Brief,
     Tags,
 }
 
@@ -508,8 +531,7 @@ pub struct EditPageState {
     pub mode: UserMode,
     pub wid: String,
     pub state: WorkItemState,
-    pub task: TextArea<'static>,
-    pub details: TextArea<'static>,
+    pub brief: TextArea<'static>,
     pub tags: TextArea<'static>,
 }
 
@@ -523,12 +545,9 @@ impl EditPageState {
                 KeyCode::Char('j') => {
                     match self.field {
                         EditPageFields::Tags => {
-                            self.field = EditPageFields::Task
+                            self.field = EditPageFields::Brief
                         }
-                        EditPageFields::Task => {
-                            self.field = EditPageFields::Details
-                        }
-                        EditPageFields::Details => {
+                        EditPageFields::Brief => {
                             self.field = EditPageFields::Tags
                         }
                     };
@@ -537,13 +556,10 @@ impl EditPageState {
                 KeyCode::Char('k') => {
                     match self.field {
                         EditPageFields::Tags => {
-                            self.field = EditPageFields::Details
+                            self.field = EditPageFields::Brief
                         }
-                        EditPageFields::Task => {
+                        EditPageFields::Brief => {
                             self.field = EditPageFields::Tags
-                        }
-                        EditPageFields::Details => {
-                            self.field = EditPageFields::Task
                         }
                     };
                     None
@@ -562,8 +578,7 @@ impl EditPageState {
                     self.mode = UserMode::Navigating;
                     Some(vec![StateChanges::UpdateWorkItem(WorkItem {
                         wid: self.wid.clone(),
-                        task: self.task.lines().join("\n"),
-                        details: self.details.lines().join("\n"),
+                        brief: self.brief.lines().join("\n"),
                         state: self.state.clone(),
                         tags: self.tags.lines().join("\n"),
                     })])
@@ -573,12 +588,8 @@ impl EditPageState {
                         self.tags.input(key);
                         None
                     }
-                    EditPageFields::Task => {
-                        self.task.input(key);
-                        None
-                    }
-                    EditPageFields::Details => {
-                        self.details.input(key);
+                    EditPageFields::Brief => {
+                        self.brief.input(key);
                         None
                     }
                 },
@@ -592,6 +603,7 @@ pub struct BurstPageState {
     pub table_idx: Option<usize>,
     pub wq: WorkQueue,
     pub bq: BurstQueue,
+    pub brief: TextArea<'static>,
 }
 
 impl BurstPageState {
@@ -614,11 +626,14 @@ impl BurstPageState {
     fn move_selection_down(&mut self) -> Option<Vec<StateChanges>> {
         if let Some(n) = self.table_idx {
             let wq = self.wq.borrow();
-            let n_items = wq.len();
+            let n_items = self.bq.len();
             if n < n_items - 1 {
                 self.table_idx = Some(n + 1)
             }
         };
+        if let Some(wi) = self.get_selected_item() {
+            self.brief = TextArea::new(wi.brief_lines());
+        }
         None
     }
 
@@ -628,6 +643,9 @@ impl BurstPageState {
                 self.table_idx = Some(n - 1)
             }
         };
+        if let Some(wi) = self.get_selected_item() {
+            self.brief = TextArea::new(wi.brief_lines());
+        }
         None
     }
 
@@ -671,9 +689,16 @@ impl BurstPageState {
     fn get_selected_item(&self) -> Option<WorkItem> {
         if let Some(idx) = self.table_idx {
             let wq = self.wq.borrow();
-            if idx < wq.len() {
-                let item = wq[idx].clone();
-                return Some(item);
+            if idx < self.bq.len() {
+                let wid = self.bq[idx].wid.clone();
+                let matches: Vec<_> =
+                    wq.clone().into_iter().filter(|wi| wi.wid == wid).collect();
+                let mut wi = WorkItem::not_found();
+                if matches.len() > 0 {
+                    wi = matches[0].clone();
+                    return Some(wi);
+                }
+                return None;
             }
         }
         None
