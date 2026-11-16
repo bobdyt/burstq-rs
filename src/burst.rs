@@ -3,12 +3,14 @@
 
 use ratatui::Frame;
 use ratatui::layout::Constraint;
+use ratatui::layout::Direction;
 use ratatui::layout::Layout;
 use ratatui::layout::Rect;
 use ratatui::style::Color;
 use ratatui::style::Style;
 use ratatui::widgets::Block;
 use ratatui::widgets::Borders;
+use ratatui::widgets::Padding;
 use ratatui::widgets::{Row, Table, TableState};
 
 use crate::model::{BurstItem, BurstPageState, WorkItem, WorkItemState};
@@ -16,40 +18,60 @@ use crate::model::{BurstItem, BurstPageState, WorkItem, WorkItemState};
 pub fn render_burst_page(
     frame: &mut Frame,
     main: Rect,
-    state: &BurstPageState,
+    state: &mut BurstPageState,
 ) {
-    let layout =
-        Layout::vertical(vec![Constraint::Percentage(100)]).split(main);
-
-    let table_area = layout[0];
-
     let mut table_state = TableState::default();
     table_state.select(state.table_idx);
 
     let header =
         Row::new(["ID", "Task"]).style(Style::new().bold()).bottom_margin(1);
 
+    let wq = state.wq.borrow();
     let items: Vec<Row> = state
         .bq
         .iter()
         .map(|bi: &BurstItem| {
-            let wq = state.wq.borrow();
             let wi = get_work_item_by_wid(&wq, bi.wid.clone());
-            return Row::new([wi.wid.clone(), wi.task.clone()]);
+            let lines =
+                wi.brief.split("\n").map(String::from).collect::<Vec<String>>();
+            let head = lines[0].clone();
+            return Row::new([wi.wid.clone(), head]);
         })
         .collect();
 
-    let widths = [Constraint::Percentage(10), Constraint::Percentage(80)];
+    let mut constraints = Vec::new();
+    constraints.push(Constraint::Percentage(50));
+    constraints.push(Constraint::Fill(1));
 
+    let direction = if main.width >= 80 {
+        Direction::Horizontal
+    } else {
+        Direction::Vertical
+    };
+
+    let layout = Layout::default()
+        .direction(direction)
+        .constraints(constraints)
+        .split(main);
+
+    let table_area = layout[0];
+    let wi_area = layout[1];
+
+    let widths = [Constraint::Percentage(10), Constraint::Percentage(80)];
     let table = Table::new(items, widths)
         .header(header)
         .column_spacing(1)
         .row_highlight_style(Style::new().on_black().bold())
         .column_highlight_style(Color::Gray)
         .cell_highlight_style(Style::new().reversed().yellow())
-        .block(Block::new().borders(Borders::ALL));
+        .block(Block::new().borders(Borders::ALL).title(" Burst queue "));
 
     frame.render_stateful_widget(table, table_area, &mut table_state);
+
+    state.brief.set_block(
+        Block::bordered().title(" Brief ").padding(Padding::horizontal(1)),
+    );
+    frame.render_widget(&state.brief, wi_area);
 }
 
 pub fn get_work_item_by_wid(wq: &Vec<WorkItem>, wid: String) -> WorkItem {
@@ -61,8 +83,7 @@ pub fn get_work_item_by_wid(wq: &Vec<WorkItem>, wid: String) -> WorkItem {
         None => WorkItem {
             wid: "not-found-id".to_string(),
             state: WorkItemState::Pending,
-            task: "FAILED TO FIND WORK ITEM".to_string(),
-            details: "FAILED TO FIND WORK ITEM".to_string(),
+            brief: "FAILED TO FIND WORK ITEM".to_string(),
             tags: "".to_string(),
         },
     };

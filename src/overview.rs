@@ -42,17 +42,19 @@ pub fn render_overview(
                 WorkItemState::Burst => "x".to_string(),
                 _ => "".to_string(),
             };
-
+            let lines =
+                wi.brief.split("\n").map(String::from).collect::<Vec<String>>();
+            let head = lines[0].clone();
             wq_rows.push(Row::new([
                 wi.wid.clone(),
-                wi.task.clone(),
+                head.clone(),
                 wi.tags.clone(),
                 burst_symbol.clone(),
             ]));
             if burst_symbol == "x".to_string() {
                 bq_rows.push(Row::new([
                     wi.wid.clone(),
-                    wi.task.clone(),
+                    head.clone(),
                     wi.tags.clone(),
                 ]))
             }
@@ -65,38 +67,33 @@ pub fn render_overview(
         0
     }));
     verticals.push(Constraint::Percentage(
-        if state.show_details && wq_rows.len() > 0 { 30 } else { 0 },
+        if state.show_brief && wq_rows.len() > 0 { 30 } else { 0 },
     ));
     verticals.push(Constraint::Length(if state.show_tag_nav { 3 } else { 0 }));
     verticals.push(Constraint::Fill(1));
     let vlayout = Layout::vertical(verticals).split(main);
 
-    if state.show_details {
+    if state.show_brief {
         let wq = state.wq.borrow();
         if let Some(idx) = state.wq_table_idx {
             if wq.len() > 0 {
                 let wi = wq[idx].clone();
-                let mut details = TextArea::from(
+                let mut brief = TextArea::from(
                     vec![
-                        wi.task.lines().map(String::from).collect::<Vec<_>>(),
-                        vec!["\n".to_string()],
-                        wi.details
-                            .lines()
-                            .map(String::from)
-                            .collect::<Vec<_>>(),
+                        wi.brief.lines().map(String::from).collect::<Vec<_>>(),
                     ]
                     .into_iter()
                     .flatten()
                     .collect::<Vec<_>>(),
                 );
-                details.set_block(
+                brief.set_block(
                     Block::bordered()
                         .title(" Preview ")
                         .padding(Padding::uniform(1)),
                 );
-                details.set_cursor_line_style(Style::default());
-                details.set_cursor_style(Style::default());
-                frame.render_widget(&details, vlayout[1]);
+                brief.set_cursor_line_style(Style::default());
+                brief.set_cursor_style(Style::default());
+                frame.render_widget(&brief, vlayout[1]);
             }
         }
     }
